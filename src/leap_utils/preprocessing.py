@@ -127,7 +127,7 @@ def detect_bad_boxes_by_angle(heads: np.ndarray, tails: np.ndarray, epsilon: flo
         bad_boxes_byAngle: [nboxes, 1], where 1 = bad box, 0 = good box
     """
     fly_angles = angles(heads, tails)
-    bad_boxes = abs(fly_angles-180) > epsilon
+    bad_boxes = abs(fly_angles) > epsilon
     return fly_angles, bad_boxes
 
 

@@ -1,0 +1,46 @@
+# import os
+# import {loader.module} as m
+# datename = 'asdfglkajbh'
+# filepath = os.path.join(root, type.folder, datename, datename + type.suffix)
+# data = m.{loader.function}(filepath)
+# data = some_fun(data)
+# return data, filepath
+# class DataLoader():
+#    def __init__(self, yamlpath):
+#    def load(self, typ):
+
+root: /Volumes/ukme04/#Common/chainingmic
+
+types:
+    poses:
+      folder: res
+      suffix: _poses.h5
+      loader: hdf5
+    video:
+      folder: [dat, dat.processed]
+      suffix: .mp4
+      loader: video
+    tracks:
+      folder: res
+      suffix: [_tracks_fixed.h5, _tracks.h5]
+      loader: hdf5
+
+loaders:
+    hdf5:
+        extensions: [h5, hdf, hdf5]
+        module: deepdish
+        function: io.load
+    video:
+        extensions: [mp4, avi]
+        module: videoreader
+        function: VideoReader
+    npy:
+        extensions: [npy, npz]
+        module: numpy
+        function: load
+    csv:
+        extensions: [csv]
+        module: pandas
+        function: from_csv
+        # args: [arguments]
+        # kwargs: {Delimiter: \t}
