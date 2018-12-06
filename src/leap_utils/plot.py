@@ -99,6 +99,7 @@ def vplay(frames: np.array, idx: np.array = None, positions: np.array = None, mo
         moviemode: auto play or advance/rewind via 'd' and 's'
     """
     import cv2
+    import time
 
     if idx is None:
         idx = range(len(frames))
@@ -123,6 +124,7 @@ def vplay(frames: np.array, idx: np.array = None, positions: np.array = None, mo
 
         if moviemode:
             ii += 1
+            time.sleep(0.01)    # to reproduce at 100 frames per second
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 cv2.destroyAllWindows()
                 break
