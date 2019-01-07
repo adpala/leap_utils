@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from sys import platform
 from sklearn.neighbors import KernelDensity
@@ -51,6 +52,20 @@ def unflatten(X: np.ndarray, dim2_len: int) -> (np.ndarray):
 def smooth(x, N):
     """Smooth signal using box filter of length N samples."""
     return np.convolve(x, np.ones((N,)) / N, mode='full')[(N - 1):]
+
+
+def rotate_points(x, y, degrees, origin=(0, 0)):
+    """Rotate a point around a given point."""
+    radians = degrees / 180 * np.pi
+    offset_x, offset_y = origin
+    adjusted_x = (x - offset_x)
+    adjusted_y = (y - offset_y)
+    cos_rad = math.cos(radians)
+    sin_rad = math.sin(radians)
+    qx = offset_x + cos_rad * adjusted_x + sin_rad * adjusted_y
+    qy = offset_y + -sin_rad * adjusted_x + cos_rad * adjusted_y
+
+    return qx, qy
 
 
 # - to utils

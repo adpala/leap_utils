@@ -55,7 +55,7 @@ def test_train_network():
     assert fit_hist
 
 
-def augment_plot_repeat(bms, title='', repeats=4, pause=1):
+def augment_plot_repeat(bms, title='', repeats=4, pause=.2):
     for _ in range(repeats):
         x, y = bms[0]
         print(x.shape)

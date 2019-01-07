@@ -8,6 +8,8 @@ from keras.optimizers import Adam
 import keras
 from keras_preprocessing import image as kp
 import leap.models
+from leap_utils.predict import predict_confmaps
+from leap_utils.postprocessing import process_confmaps_simple
 
 
 class BoxMaskSequence(keras.utils.Sequence):
@@ -70,9 +72,9 @@ class BoxMaskSequence(keras.utils.Sequence):
                 # random_brightness per channel
                 for chn in range(xx.shape[-1]):
                     u = np.random.uniform(*self.brg)
-                    x[idx, ..., chn:chn+1] = kp.apply_brightness_shift(xx[..., chn:chn+1], u)
+                    x[idx, ..., chn:chn + 1] = kp.apply_brightness_shift(xx[..., chn:chn + 1], u)
             if self.rg > 0 or self.wrg > 0 or self.hrg > 0 or self.zrg is not None:
-                params = {'theta': 0, 'tx': 0, 'ty': 0, 'shear': 0, 'zx':1, 'zy': 1}
+                params = {'theta': 0, 'tx': 0, 'ty': 0, 'shear': 0, 'zx': 1, 'zy': 1}
                 if self.rg > 0:
                     params['theta'] = np.random.uniform(-self.rg, self.rg)
                 if self.wrg > 0 or self.hrg > 0:
@@ -165,17 +167,19 @@ def train_val_split(N, val_size=0.10, shuffle=True):
 
 
 def train_network(boxes, positions, save_weights_path,
-                  batch_size: int = 32, epochs: int = 50,
-                  val_size: float = 0.10, verbose: int = 1):
+                  batch_size: int = 32, epochs: int = 100,
+                  val_size: float = 0.10, verbose: int = 1,
+                  hflip=False, vflip=False):
     """Train LEAP network on boxes and positions.
 
     Args:
-        boxes
-        positions
+        boxes: [nb_boxes, width, height, color-channels]
+        positions: [nb_boxes, nb_parts, x/y]
         batch_size:32
         epochs:50
         val_size:0.10
         verbose:1
+        hflip=False, vflip=False
     Returns:
         fit history
     """
@@ -185,10 +189,12 @@ def train_network(boxes, positions, save_weights_path,
     maps = make_masks(positions, size=box_size)
 
     train_idx, val_idx = train_val_split(nb_boxes, val_size)
-    G = BoxMaskSequence(boxes[train_idx, ...], maps[train_idx, ...])
-    G_val = BoxMaskSequence(boxes[val_idx, ...], maps[val_idx, ...])
+    G = BoxMaskSequence(boxes[train_idx, ...], maps[train_idx, ...],
+                        batch_size=batch_size, hflip=hflip, vflip=vflip)
+    G_val = BoxMaskSequence(boxes[val_idx, ...], maps[val_idx, ...],
+                            batch_size=batch_size)
 
-    m = initialize_network(image_size=boxes.shape[1:3], output_channels=maps.shape[-1])
+    m = initialize_network(image_size=box_size, output_channels=maps.shape[-1])
     m.save(f"{save_weights_path}.model")
 
     step_num = int(nb_boxes / batch_size)
@@ -202,5 +208,27 @@ def train_network(boxes, positions, save_weights_path,
     return fit_hist
 
 
-def evaluate_network(network, boxes, positions):
-    pass
+def evaluate_network(network, boxes, positions, batch_size: int = 100):
+    """Evaluate LEAP network on boxes and positions.
+
+    Args:
+        network
+        boxes: [nb_boxes, width, height, color-channels]
+        positions: [nb_boxes, nb_parts, x/y]
+        batch_size:32
+    Returns:
+        mean_map_error: MSE between predicted and actual confmaps
+        mean_position_error: MSE between prediction and actual positions
+        position_error: MSE between prediction and actual positions
+
+    """
+
+    confmaps = make_masks(positions, size=box_size)
+    confmaps_predicted = predict_confmaps(network, boxes, batch_size)
+    mean_map_error = np.sum(np.square(confmaps - confmaps_predicted))
+
+    positions_predicted, confidence = process_confmaps_simple(confmaps)
+    position_error = np.square(positions - positions_predicted)
+    mean_position_error = np.mean(position_error)
+
+    return mean_map_error, mean_position_error, position_error

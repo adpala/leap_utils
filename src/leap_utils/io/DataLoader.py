@@ -7,7 +7,7 @@ from typing import Callable
 from itertools import product
 
 
-class DataLoader():
+class DataLoader:
     """DataLoader.
 
     More documentation:
@@ -31,7 +31,7 @@ class DataLoader():
     - add fixed files: e.g. network models?
     """
 
-    def __init__(self, config_filename: str, root: str = None):
+    def __init__(self, config_filename: str, root: str = None) -> None:
         """Initialize DataLoader with data from config.
 
         Args:
@@ -60,9 +60,6 @@ class DataLoader():
             raise KeyError(f'Unknown file type "{typ}". Needs to be one of {self.types.keys()}.')
 
         filepath = self._filename(typ, identifier)
-        # logging.warning('HARDCODED FILE PATH')
-        # filepath = '../../../leap_utils_test/model.h5'
-        # filepath = '../../../leap_utils_test/video_short.mp4'
         logging.debug(f'FILEPATH assembled as "{filepath}".')
 
         if loader_fun is None:
@@ -112,7 +109,6 @@ class DataLoader():
 
         filepath = None
         filepaths_tried = []
-        print(list(product(self.types[typ]['folder'], self.types[typ]['suffix'])))
         for folder, suffix in product(self.types[typ]['folder'], self.types[typ]['suffix']):
             _filepath = os.path.join(self._config['root'],
                                      folder,
@@ -134,45 +130,7 @@ class DataLoader():
         return importlib.import_module(module_name)
 
     def _idfile(self, filepath):
-        for name, loader in dl.loaders.items():
+        for name, loader in self.loaders.items():
             for ext in loader['extensions']:
                 if filepath.endswith(ext):
                     return name
-
-
-if __name__ == '__main__':
-    dl = DataLoader('scripts/io.yaml', root='ROOT_OVERRIDE')
-    print(dl._config['root'])
-
-    logging.basicConfig(level=logging.DEBUG)
-    print(os.getcwd())
-    dl = DataLoader('scripts/io.yaml')
-    print(dl._config)
-    print(dl.types)
-    print(dl.loaders)
-
-    print(dl._idfile('test.h5'))
-    print(dl._idfile('test.npy'))
-    print(dl._idfile('test.mp4'))
-
-    try:
-        dl.get('poposes', '')
-    except KeyError as e:
-        print(e)
-        print('successfully raised KeyError')
-
-    print(dl.path('tracks', 'localhost-20180720_182837'))
-    tracks = dl.get('tracks', 'localhost-20180720_182837')
-    print(tracks.keys())
-
-    poses = dl.get('poses', 'localhost-20180720_182837')
-    print(dl.path('poses', 'localhost-20180720_182837'))
-    print(poses.keys())
-
-    vr = dl.get('video', 'localhost-20180720_182837')
-    print(dl.path('video', 'localhost-20180720_182837'))
-    print(vr)
-
-    from videoreader import VideoReader
-    vr = dl.get('video', 'localhost-20180720_182837', loader_fun=VideoReader)
-    print(vr)

@@ -91,3 +91,9 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# pycharm configs
+.idea
+
+# mypy files
+.mypy*

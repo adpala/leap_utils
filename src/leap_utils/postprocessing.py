@@ -22,7 +22,6 @@ def max2d_multi(mask: np.ndarray, num_peaks: int, smooth: float = None,
         if smooth:
             plane = skimage.filters.gaussian(plane, smooth)
         tmp = skimage.feature.peak_local_max(plane, num_peaks=num_peaks, exclude_border=exclude_border, min_distance=min_distance)
-        print(tmp)
         maxima[..., idx] = tmp
     return maxima
 
