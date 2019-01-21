@@ -102,7 +102,7 @@ class BoxMaskSequence(keras.utils.Sequence):
         return x, y
 
 
-def points2mask(points: np.ndarray, size: Sequence, sigma: float = 2,
+def points2mask(points: np.ndarray, size: Sequence, sigma: float = 5,
                 normalize: bool = True, merge_channels: bool = False) -> np.ndarray:
     """Get stack of 2d map from points.
 
@@ -126,7 +126,7 @@ def points2mask(points: np.ndarray, size: Sequence, sigma: float = 2,
     return mask
 
 
-def make_masks(points, size, sigma: float = 2,
+def make_masks(points, size, sigma: float = 5,
                normalize: bool = True, merge_channels: bool = False):
     """Make masks from point sets.
 
@@ -143,10 +143,10 @@ def make_masks(points, size, sigma: float = 2,
     return maps
 
 
-def initialize_network(image_size, output_channels, nb_filters: int = 32):
+def initialize_network(image_size, output_channels, nb_filters: int = 32, network_type=leap.models.leap_cnn):
     """Initialize LEAP network model."""
-    m = leap.models.leap_cnn(image_size, output_channels, filters=nb_filters,
-                             upsampling_layers=True, amsgrad=True, summary=True)
+    m = network_type(image_size, output_channels, filters=nb_filters,
+                     upsampling_layers=True, amsgrad=True, summary=True)
     m.compile(optimizer=Adam(amsgrad=True), loss="mean_squared_error")
     return m
 
@@ -168,25 +168,33 @@ def train_val_split(N, val_size=0.10, shuffle=True):
 
 def train_network(boxes, positions, save_weights_path,
                   batch_size: int = 32, epochs: int = 100,
-                  val_size: float = 0.10, verbose: int = 1,
-                  hflip=False, vflip=False):
+                  val_size: float = 0.10, verbose: int = 1, flipall: bool = False,
+                  sigma: float = 5, hflip: bool = False, vflip: bool = False,
+                  rg: float = 0, wrg: float = 0, hrg: float = 0,
+                  zrg=None, brg=None,
+                  network_type=leap.models.leap_cnn):
     """Train LEAP network on boxes and positions.
 
     Args:
         boxes: [nb_boxes, width, height, color-channels]
         positions: [nb_boxes, nb_parts, x/y]
         batch_size:32
-        epochs:50
+        epochs:100
         val_size:0.10
         verbose:1
-        hflip=False, vflip=False
+        sigma: float = 6
+        augmentation params:
+            hflip=False, vflip=False,
+            rg: float = 0, wrg: float = 0, hrg: float = 0,
+            zrg=None, brg=None,
     Returns:
         fit history
     """
     box_size = boxes.shape[1:3]
+    img_size = boxes.shape[1:4]
     nb_boxes = boxes.shape[0]
 
-    maps = make_masks(positions, size=box_size)
+    maps = make_masks(positions, size=box_size, sigma=sigma)
 
     train_idx, val_idx = train_val_split(nb_boxes, val_size)
     G = BoxMaskSequence(boxes[train_idx, ...], maps[train_idx, ...],
@@ -194,15 +202,17 @@ def train_network(boxes, positions, save_weights_path,
     G_val = BoxMaskSequence(boxes[val_idx, ...], maps[val_idx, ...],
                             batch_size=batch_size)
 
-    m = initialize_network(image_size=box_size, output_channels=maps.shape[-1])
+    m = initialize_network(image_size=img_size, output_channels=maps.shape[-1], network_type=network_type)
     m.save(f"{save_weights_path}.model")
 
-    step_num = int(nb_boxes / batch_size)
+    step_num = len(G)
+    step_num_val = len(G_val)
+
     fit_hist = m.fit_generator(G, epochs=epochs, steps_per_epoch=step_num,
-                               validation_data=G_val, validation_steps=step_num,
+                               validation_data=G_val, validation_steps=step_num_val,
                                callbacks=[ModelCheckpoint(f"{save_weights_path}.best", save_best_only=True, verbose=verbose),
                                           EarlyStopping(patience=20),
-                                          ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2, cooldown=0,
+                                          ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=1, cooldown=0,
                                                             min_delta=0.00001, min_lr=0.0, verbose=verbose)])
     m.save_weights(f"{save_weights_path}.final")
     return fit_hist
