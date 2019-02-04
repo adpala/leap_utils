@@ -11,15 +11,15 @@ def crop_frame(frame: np.array, center: np.uintp, box_size: np.uintp, mode: str 
 
     frame: np.array, center: np.uintp, box_size: np.uintp, mode: str='clip'
     """
-    box_hw_left = np.ceil(box_size/2)
-    box_hw_right = np.floor(box_size/2)
-    x_px = np.arange(center[0]-box_hw_left[0], center[0]+box_hw_right[0]).astype(np.intp)
-    y_px = np.arange(center[1]-box_hw_left[1], center[1]+box_hw_right[1]).astype(np.intp)
+    box_hw_left = np.ceil(box_size / 2)
+    box_hw_right = np.floor(box_size / 2)
+    x_px = np.arange(center[0] - box_hw_left[0], center[0] + box_hw_right[0]).astype(np.intp)
+    y_px = np.arange(center[1] - box_hw_left[1], center[1] + box_hw_right[1]).astype(np.intp)
     return frame.take(y_px, mode=mode, axis=1).take(x_px, mode=mode, axis=0)
 
 
 def export_boxes(frames: Sequence, box_centers: np.array, box_size: List[int],
-                 box_angles: np.array = None) -> (np.array, np.array, np.array):
+                 box_angles: np.array = None, background: np.array = None) -> (np.array, np.array, np.array):
     """Export boxes.
 
     Args:
@@ -27,15 +27,19 @@ def export_boxes(frames: Sequence, box_centers: np.array, box_size: List[int],
         box_size: [width, height]
         box_centers: [nframes in vid, flyid, 2]
         box_angles: [nframes in vid, flyid, 1], if not None, will rotate flies
+        background (OPTIONAL): [width, height]
     Returns:
-         boxes
+         boxes - if background is provided, will add box background as new channel(s)
          fly_id: fly id for each box
          fly_frame: frame number for each box
     """
     nb_frames = len(frames)
     nb_channels = frames[0].shape[-1]
     nb_flies = box_centers.shape[1]
-    nb_boxes = nb_frames*nb_flies
+    nb_boxes = nb_frames * nb_flies
+
+    if background is not None:
+        nb_channels = 2 * nb_channels
 
     # make this a dict?
     boxes = np.zeros((nb_boxes, *box_size, nb_channels), dtype=np.uint8)
@@ -49,12 +53,23 @@ def export_boxes(frames: Sequence, box_centers: np.array, box_size: List[int],
             fly_id[box_idx] = fly_number
             fly_frame[box_idx] = frame_number
             if box_angles is not None:
-                box = crop_frame(frame, box_centers[frame_number, fly_number, :], 1.5*box_size)  # crop larger box to get padding for rotation
+                box = crop_frame(frame, box_centers[frame_number, fly_number, :], 1.5 * box_size)  # crop larger box to get padding for rotation
                 box = sk_rotate(box, box_angles[frame_number, fly_number, :],
                                 resize=False, mode='edge', preserve_range=True)
-                box = crop_frame(box, np.array(box.shape)/2, box_size)    # trim rotated box to the right size
+                box = crop_frame(box, np.array(box.shape) / 2, box_size)    # trim rotated box to the right size
+                if background is not None:
+                    box_bg = crop_frame(background, box_centers[frame_number, fly_number, :], 1.5 * box_size)  # crop larger box to get padding for rotation
+                    box_bg = sk_rotate(box_bg, box_angles[frame_number, fly_number, :],
+                                       resize=False, mode='edge', preserve_range=True)
+                    box_bg = crop_frame(box_bg, np.array(box.shape) / 2, box_size)    # trim rotated box to the right size
             else:
                 box = crop_frame(frame, box_centers[frame_number, fly_number, :], box_size)
+                if background is not None:
+                    box_bg = crop_frame(background, box_centers[frame_number, fly_number, :], box_size)
+
+            if background is not None:
+                box = np.concatenate((box, box_bg), axis=-1)
+
             boxes[box_idx, ...] = box
 
     return boxes, fly_id, fly_frame
@@ -119,7 +134,7 @@ def angles(heads: np.array, tails: np.array) -> np.array:
     tails = flatten(tails)
 
     fly_angles = np.zeros((heads.shape[0], 1))
-    fly_angles[:, 0] = 90 + np.arctan2(heads[:, 0]-tails[:, 0], heads[:, 1]-tails[:, 1]) * 180 / np.pi
+    fly_angles[:, 0] = 90 + np.arctan2(heads[:, 0] - tails[:, 0], heads[:, 1] - tails[:, 1]) * 180 / np.pi
     return unflatten(fly_angles, nfly)
 
 
@@ -186,8 +201,8 @@ def fix_orientations(lines0, chamber_number=0):
             # define change points as maxima in orientation changes between switchs in direction of motion
             changepoints.append(switchtimes[cnt] + np.argmax(np.abs(orichange[switchtimes[cnt] - 1:switchtimes[cnt + 1]])))
             # mark change points for interpolation
-            velsmooththres[changepoints[-1]-1] = -switchpoint[cnt]
-            velsmooththres[changepoints[-1]] = switchpoint[cnt+1]
+            velsmooththres[changepoints[-1] - 1] = -switchpoint[cnt]
+            velsmooththres[changepoints[-1]] = switchpoint[cnt + 1]
 
         # 4. fill values using change points - `-1` means we need to swap head and tail
         idx, = np.where(velsmooththres != 0)  # update `idx` to include newly marked change points
