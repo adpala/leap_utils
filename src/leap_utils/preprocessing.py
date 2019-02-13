@@ -61,7 +61,7 @@ def export_boxes(frames: Sequence, box_centers: np.array, box_size: List[int],
                     box_bg = crop_frame(background, box_centers[frame_number, fly_number, :], 1.5 * box_size)  # crop larger box to get padding for rotation
                     box_bg = sk_rotate(box_bg, box_angles[frame_number, fly_number, :],
                                        resize=False, mode='edge', preserve_range=True)
-                    box_bg = crop_frame(box_bg, np.array(box.shape) / 2, box_size)    # trim rotated box to the right size
+                    box_bg = crop_frame(box_bg, np.array(box_bg.shape) / 2, box_size)    # trim rotated box to the right size
             else:
                 box = crop_frame(frame, box_centers[frame_number, fly_number, :], box_size)
                 if background is not None:
@@ -75,11 +75,12 @@ def export_boxes(frames: Sequence, box_centers: np.array, box_size: List[int],
     return boxes, fly_id, fly_frame
 
 
-def get_box(frame, box_center, box_size, box_angle):
+def get_box(frame, box_center, box_size, box_angle, background=None):
     """Get single box given position, box size and angle."""
     box, *_ = export_boxes(frame[np.newaxis, ...],
                            box_center[np.newaxis, np.newaxis, ...],
-                           box_size, box_angle[np.newaxis, np.newaxis, ...])
+                           box_size, box_angle[np.newaxis, np.newaxis, ...],
+                           background)
     return box[0, ...]
 
 

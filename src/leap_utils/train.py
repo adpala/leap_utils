@@ -7,7 +7,7 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 from keras.optimizers import Adam
 import keras
 from keras_preprocessing import image as kp
-import leap.models
+import leap_utils.models
 from leap_utils.predict import predict_confmaps
 from leap_utils.postprocessing import process_confmaps_simple
 
@@ -48,9 +48,7 @@ class BoxMaskSequence(keras.utils.Sequence):
         self.hrg = hrg
         self.zrg = zrg
         self.brg = brg
-
         self._set_index_array()
-        print(self._index_array)
 
     def on_epoch_end(self):
         self._set_index_array()
@@ -143,7 +141,7 @@ def make_masks(points, size, sigma: float = 5,
     return maps
 
 
-def initialize_network(image_size, output_channels, nb_filters: int = 32, network_type=leap.models.leap_cnn):
+def initialize_network(image_size, output_channels, nb_filters: int = 64, network_type=leap_utils.models.leap_cnn):
     """Initialize LEAP network model."""
     m = network_type(image_size, output_channels, filters=nb_filters,
                      upsampling_layers=True, amsgrad=True, summary=True)
@@ -151,13 +149,14 @@ def initialize_network(image_size, output_channels, nb_filters: int = 32, networ
     return m
 
 
-def train_val_split(N, val_size=0.10, shuffle=True):
+def train_val_split(N, val_size=0.10, shuffle=True, seed=None):
     """Split datasets into training and validation sets."""
     if val_size < 1:
         val_size = int(np.round(N * val_size))
 
     idx = np.arange(N)
     if shuffle:
+        np.random.seed(seed)
         np.random.shuffle(idx)
 
     val_idx = idx[:val_size]
@@ -172,7 +171,7 @@ def train_network(boxes, positions, save_weights_path,
                   sigma: float = 5, hflip: bool = False, vflip: bool = False,
                   rg: float = 0, wrg: float = 0, hrg: float = 0,
                   zrg=None, brg=None,
-                  network_type=leap.models.leap_cnn):
+                  network_type=leap_utils.models.leap_cnn, seed=None):
     """Train LEAP network on boxes and positions.
 
     Args:
@@ -196,7 +195,7 @@ def train_network(boxes, positions, save_weights_path,
 
     maps = make_masks(positions, size=box_size, sigma=sigma)
 
-    train_idx, val_idx = train_val_split(nb_boxes, val_size)
+    train_idx, val_idx = train_val_split(nb_boxes, val_size, seed=seed)
     G = BoxMaskSequence(boxes[train_idx, ...], maps[train_idx, ...],
                         batch_size=batch_size, hflip=hflip, vflip=vflip)
     G_val = BoxMaskSequence(boxes[val_idx, ...], maps[val_idx, ...],
@@ -211,11 +210,11 @@ def train_network(boxes, positions, save_weights_path,
     fit_hist = m.fit_generator(G, epochs=epochs, steps_per_epoch=step_num,
                                validation_data=G_val, validation_steps=step_num_val,
                                callbacks=[ModelCheckpoint(f"{save_weights_path}.best", save_best_only=True, verbose=verbose),
-                                          EarlyStopping(patience=20),
-                                          ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=1, cooldown=0,
-                                                            min_delta=0.00001, min_lr=0.0, verbose=verbose)])
+                                          EarlyStopping(patience=5),
+                                          ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=1, cooldown=0,
+                                                            min_delta=0.00001, min_lr=0.0, verbose=verbose)],)
     m.save_weights(f"{save_weights_path}.final")
-    return fit_hist
+    return fit_hist, train_idx, val_idx
 
 
 def evaluate_network(network, boxes, positions, batch_size: int = 100):
@@ -232,7 +231,7 @@ def evaluate_network(network, boxes, positions, batch_size: int = 100):
         position_error: MSE between prediction and actual positions
 
     """
-
+    box_size = boxes.shape[1:3]
     confmaps = make_masks(positions, size=box_size)
     confmaps_predicted = predict_confmaps(network, boxes, batch_size)
     mean_map_error = np.sum(np.square(confmaps - confmaps_predicted))
